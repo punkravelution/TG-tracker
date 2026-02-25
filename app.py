@@ -9,7 +9,6 @@ from database import (
     get_users,
     init_db,
     mark_done_today,
-    upsert_user,
 )
 from scheduler import run_reminder_check
 
@@ -61,38 +60,17 @@ st.title("Habit Tracker MVP")
 
 st.sidebar.title("User")
 users = get_users()
+st.sidebar.caption("If your name is not here, send /start to the bot first.")
 
-saved_user_labels = [f"{user['name'] or 'Unnamed'} ({user['chat_id']})" for user in users]
-selected_user_label = st.sidebar.selectbox(
-    "Saved users",
-    ["New user"] + saved_user_labels,
-)
-
-selected_user = None
-if selected_user_label != "New user":
+if users:
+    saved_user_labels = [f"{user['name'] or 'Unnamed'} ({user['chat_id']})" for user in users]
+    selected_user_label = st.sidebar.selectbox("Registered users", saved_user_labels)
     selected_user = users[saved_user_labels.index(selected_user_label)]
-
-default_name = selected_user["name"] if selected_user else ""
-default_chat_id = selected_user["chat_id"] if selected_user else ""
-
-user_name = st.sidebar.text_input("Name", value=default_name)
-user_chat_id = st.sidebar.text_input("Chat ID", value=default_chat_id)
-
-if st.sidebar.button("Save user"):
-    clean_name = user_name.strip()
-    clean_chat_id = user_chat_id.strip()
-    if not clean_chat_id:
-        st.sidebar.error("Chat ID is required.")
-    else:
-        current_user_id = upsert_user(clean_name, clean_chat_id)
-        st.session_state.current_user_id = current_user_id
-        st.sidebar.success(f"User saved (id={current_user_id})")
-
-if "current_user_id" not in st.session_state and selected_user is not None:
     st.session_state.current_user_id = selected_user["id"]
-
-if selected_user is not None and st.session_state.get("current_user_id") != selected_user["id"]:
-    st.session_state.current_user_id = selected_user["id"]
+else:
+    selected_user = None
+    st.session_state.pop("current_user_id", None)
+    st.sidebar.info("No registered users yet.")
 
 current_user_id = st.session_state.get("current_user_id")
 if current_user_id is not None:
