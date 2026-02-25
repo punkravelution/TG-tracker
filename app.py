@@ -49,6 +49,14 @@ def is_valid_hhmm(value: str) -> bool:
     return bool(re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value.strip()))
 
 
+def hhmm_to_digits(value: str) -> str:
+    return value.replace(":", "")
+
+
+def digits_to_hhmm(value: str) -> str:
+    return f"{value[:2]}:{value[2:4]}"
+
+
 init_db()
 
 current_minute = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -126,35 +134,48 @@ st.subheader("Create habit")
 with st.form("create_habit_form"):
     if "quick_time" not in st.session_state:
         st.session_state.quick_time = QUICK_TIME_OPTIONS[0]
-    if "reminder_time_text" not in st.session_state:
-        st.session_state.reminder_time_text = datetime.now().strftime("%H:%M")
+    if "reminder_time_digits" not in st.session_state:
+        st.session_state.reminder_time_digits = datetime.now().strftime("%H%M")
 
     name = st.text_input("Habit name")
     quick_time = st.selectbox("Quick time", QUICK_TIME_OPTIONS, key="quick_time")
 
     preset_hhmm = get_preset_hhmm(quick_time)
     if preset_hhmm is not None:
-        st.session_state.reminder_time_text = preset_hhmm
+        st.session_state.reminder_time_digits = hhmm_to_digits(preset_hhmm)
 
-    reminder_time_text = st.text_input(
-        "Reminder time (HH:MM)",
-        key="reminder_time_text",
+    reminder_time_digits_input = st.text_input(
+        "Reminder time (4 digits HHMM)",
+        key="reminder_time_digits",
+        placeholder="2137",
     )
+
+    reminder_time_digits = "".join(ch for ch in reminder_time_digits_input if ch.isdigit())[:4]
+    if reminder_time_digits != reminder_time_digits_input:
+        st.session_state.reminder_time_digits = reminder_time_digits
+
+    if len(reminder_time_digits) == 4:
+        st.caption(f"Formatted time: {digits_to_hhmm(reminder_time_digits)}")
+
     submitted = st.form_submit_button("Add")
 
 if submitted:
     cleaned_name = name.strip()
-    hhmm = reminder_time_text.strip()
+    hhmm_digits = st.session_state.get("reminder_time_digits", "")
     if current_user_id is None:
         st.error("Please save/select a user in the sidebar first.")
     elif not cleaned_name:
         st.error("Habit name cannot be empty.")
-    elif not is_valid_hhmm(hhmm):
-        st.error("Reminder time must be in HH:MM format (00-23 and 00-59).")
+    elif len(hhmm_digits) != 4:
+        st.error("Reminder time must contain exactly 4 digits, for example 2137.")
     else:
-        create_habit_for_user(current_user_id, cleaned_name, hhmm)
-        st.success("Habit added!")
-        st.rerun()
+        hhmm = digits_to_hhmm(hhmm_digits)
+        if not is_valid_hhmm(hhmm):
+            st.error("Reminder time must be valid (hours 00-23 and minutes 00-59).")
+        else:
+            create_habit_for_user(current_user_id, cleaned_name, hhmm)
+            st.success("Habit added!")
+            st.rerun()
 
 st.subheader("Your habits")
 done_habit_ids = get_done_habit_ids_for_today()
