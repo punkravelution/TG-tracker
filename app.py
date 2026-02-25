@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timedelta
 
 import streamlit as st
@@ -43,19 +42,6 @@ def get_preset_hhmm(option: str) -> str | None:
         "Night (22:30)": "22:30",
     }
     return fixed_times.get(option)
-
-
-def is_valid_hhmm(value: str) -> bool:
-    return bool(re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value.strip()))
-
-
-def hhmm_to_digits(value: str) -> str:
-    return value.replace(":", "")
-
-
-def digits_to_hhmm(value: str) -> str:
-    return f"{value[:2]}:{value[2:4]}"
-
 
 init_db()
 
@@ -134,45 +120,55 @@ st.subheader("Create habit")
 with st.form("create_habit_form"):
     if "quick_time" not in st.session_state:
         st.session_state.quick_time = QUICK_TIME_OPTIONS[0]
-    if "reminder_time_digits" not in st.session_state:
-        st.session_state.reminder_time_digits = datetime.now().strftime("%H%M")
+    if "reminder_hh" not in st.session_state:
+        st.session_state.reminder_hh = datetime.now().strftime("%H")
+    if "reminder_mm" not in st.session_state:
+        st.session_state.reminder_mm = datetime.now().strftime("%M")
 
     name = st.text_input("Habit name")
     quick_time = st.selectbox("Quick time", QUICK_TIME_OPTIONS, key="quick_time")
 
     preset_hhmm = get_preset_hhmm(quick_time)
     if preset_hhmm is not None:
-        st.session_state.reminder_time_digits = hhmm_to_digits(preset_hhmm)
+        preset_hh, preset_mm = preset_hhmm.split(":")
+        st.session_state.reminder_hh = preset_hh
+        st.session_state.reminder_mm = preset_mm
 
-    reminder_time_digits_input = st.text_input(
-        "Reminder time (4 digits HHMM)",
-        key="reminder_time_digits",
-        placeholder="2137",
-    )
+    hh_col, colon_col, mm_col = st.columns([1, 0.2, 1])
+    with hh_col:
+        hh_input = st.text_input("HH", key="reminder_hh", placeholder="21")
+    with colon_col:
+        st.markdown("<div style='text-align:center; padding-top: 30px;'>:</div>", unsafe_allow_html=True)
+    with mm_col:
+        mm_input = st.text_input("MM", key="reminder_mm", placeholder="37")
 
-    reminder_time_digits = "".join(ch for ch in reminder_time_digits_input if ch.isdigit())[:4]
-    if reminder_time_digits != reminder_time_digits_input:
-        st.session_state.reminder_time_digits = reminder_time_digits
+    hh_digits = "".join(ch for ch in hh_input if ch.isdigit())[:2]
+    mm_digits = "".join(ch for ch in mm_input if ch.isdigit())[:2]
 
-    if len(reminder_time_digits) == 4:
-        st.caption(f"Formatted time: {digits_to_hhmm(reminder_time_digits)}")
+    if hh_digits != hh_input:
+        st.session_state.reminder_hh = hh_digits
+    if mm_digits != mm_input:
+        st.session_state.reminder_mm = mm_digits
 
     submitted = st.form_submit_button("Add")
 
 if submitted:
     cleaned_name = name.strip()
-    hhmm_digits = st.session_state.get("reminder_time_digits", "")
+    hh_raw = st.session_state.get("reminder_hh", "")
+    mm_raw = st.session_state.get("reminder_mm", "")
     if current_user_id is None:
         st.error("Please save/select a user in the sidebar first.")
     elif not cleaned_name:
         st.error("Habit name cannot be empty.")
-    elif len(hhmm_digits) != 4:
-        st.error("Reminder time must contain exactly 4 digits, for example 2137.")
+    elif not hh_raw.isdigit() or not mm_raw.isdigit() or not (1 <= len(hh_raw) <= 2) or not (1 <= len(mm_raw) <= 2):
+        st.error("Reminder time must be numeric in HH and MM fields.")
     else:
-        hhmm = digits_to_hhmm(hhmm_digits)
-        if not is_valid_hhmm(hhmm):
+        hh_int = int(hh_raw)
+        mm_int = int(mm_raw)
+        if not (0 <= hh_int <= 23 and 0 <= mm_int <= 59):
             st.error("Reminder time must be valid (hours 00-23 and minutes 00-59).")
         else:
+            hhmm = f"{hh_int:02d}:{mm_int:02d}"
             create_habit_for_user(current_user_id, cleaned_name, hhmm)
             st.success("Habit added!")
             st.rerun()
